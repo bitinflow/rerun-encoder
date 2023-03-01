@@ -2,7 +2,7 @@
   "name": "rerun-encoder",
   "private": true,
   "productName": "Rerun Encoder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Official Rerun Encoder App for Rerun Manager",
   "main": "dist-electron/main/index.js",
   "scripts": {
