@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  -webkit-user-select: none;
+  -webkit-app-region: drag;
+}
+
+button, a, input, label {
+  -webkit-app-region: no-drag;
+}
