@@ -89,6 +89,7 @@ export class InternalServer {
             name: response.data.name,
             config: response.data.config,
             avatar_url: response.data.avatar_url,
+            premium: response.data.premium,
         }
     }
 
