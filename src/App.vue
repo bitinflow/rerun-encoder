@@ -111,7 +111,7 @@ const storageUpgradeRequired = computed(() => {
   if (!settings.value) return false
   if (!settings.value.credentials) return false
   // @ts-ignore
-  return !settings.value.credentials.user.config.premium
+  return !settings.value.credentials.user.premium
 })
 
 onMounted(() => {

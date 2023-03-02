@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import {Credentials, Settings} from "../../shared/schema";
 
 const defaults: Settings = {
-    version: '1.0.0',
+    version: '1.0.1',
     credentials: null,
     endpoint: 'https://api.rerunmanager.com/v1/',
 }

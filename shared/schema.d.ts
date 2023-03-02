@@ -5,6 +5,7 @@ export interface User {
     id: string
     name: string
     avatar_url: string
+    premium: boolean
     config: {
         storage_limit: number
         videos_limit: number
