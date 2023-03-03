@@ -1,13 +1,13 @@
 import {app, BrowserWindow, ipcMain, shell} from 'electron'
 import {release} from 'node:os'
 import {join} from 'node:path'
-import {Settings} from "../../shared/schema";
+import {EncoderOptions, Settings} from "../../shared/schema";
 import {SettingsRepository} from "../rerun-manager/settings-repository";
-import {Encoder, EncoderOptions} from "../rerun-manager/encoder";
-import IpcMainInvokeEvent = Electron.IpcMainInvokeEvent;
+import {Encoder} from "../rerun-manager/encoder";
 import {InternalServer} from "../rerun-manager/internal-server";
 import {emit} from "./helpers";
 import {platform} from "node:process";
+import IpcMainInvokeEvent = Electron.IpcMainInvokeEvent;
 
 // The built directory structure
 //
@@ -41,7 +41,11 @@ if (require('electron-squirrel-startup')) {
     app.quit()
 }
 
-require('update-electron-app')()
+require('update-electron-app')({
+    repo: 'bitinflow/rerun-encoder',
+    updateInterval: '1 hour',
+    logger: require('electron-log')
+})
 
 // Remove electron security warnings
 // This warning only shows in development mode
@@ -150,7 +154,7 @@ ipcMain.handle('open-win', (_, arg) => {
 
 ipcMain.handle('version', async () => app.getVersion())
 ipcMain.handle('settings', async () => settingsRepository.getSettings())
-ipcMain.handle('logout', async () => settingsRepository.logout())
+ipcMain.handle('logout', async () => await settingsRepository.logout())
 ipcMain.handle('quit', async () => app.quit())
 ipcMain.handle('minimize', async () => win.minimize())
 ipcMain.handle('encode', async (event: IpcMainInvokeEvent, ...args: any[]) => {

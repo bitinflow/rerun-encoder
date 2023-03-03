@@ -34,7 +34,7 @@ export class InternalServer {
         });
 
         router.get('/oauth', (ctx) => {
-            if(process.env.VITE_DEV_SERVER_URL) {
+            if (process.env.VITE_DEV_SERVER_URL) {
                 ctx.body = fs.readFileSync(join(__dirname, '..', '..', 'public', 'callback.html'), {encoding: 'utf8'})
             } else {
                 ctx.body = fs.readFileSync(join(process.env.DIST, 'callback.html'), {encoding: 'utf8'})
