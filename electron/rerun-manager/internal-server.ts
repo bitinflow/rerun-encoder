@@ -6,10 +6,11 @@ import koaCors from "koa-cors";
 import bodyParser from "koa-bodyparser";
 import axios, {AxiosInstance} from "axios";
 import {app} from "electron"
-import {Credentials, User} from "../../shared/schema";
+import {Credentials} from "../../shared/schema";
 import {SettingsRepository} from "./settings-repository";
 import * as fs from "fs";
 import {join} from "node:path";
+import {resolveUser} from "../main/helpers";
 
 export class InternalServer {
     private readonly app: Application;
@@ -50,7 +51,7 @@ export class InternalServer {
                 expires_in: params.get('expires_in'),
                 expires_at: this.calculateExpiresAt(params.get('expires_in')),
                 state: params.get('state'),
-                user: await this.resolveUser(params.get('access_token'), params.get('token_type')),
+                user: await resolveUser(params.get('access_token'), params.get('token_type')),
             }
 
             console.log('credentials', credentials);
@@ -74,23 +75,6 @@ export class InternalServer {
         this.app.listen(8361, () => {
             console.log(`Server listening http://127.0.0.1:8361/`);
         });
-    }
-
-    private async resolveUser(accessToken: string, tokenType: string): Promise<User> {
-        const response = await this.axios.get('https://api.rerunmanager.com/v1/channels/me', {
-            headers: {
-                'Accept': 'application/json',
-                'Authorization': `${tokenType} ${accessToken}`,
-            }
-        });
-
-        return {
-            id: response.data.id,
-            name: response.data.name,
-            config: response.data.config,
-            avatar_url: response.data.avatar_url,
-            premium: response.data.premium,
-        }
     }
 
     private calculateExpiresAt(expiresIn: string) {

@@ -161,8 +161,8 @@ ipcMain.handle('encode', async (event: IpcMainInvokeEvent, ...args: any[]) => {
         onUploadProgress: (id, progress) => event.sender.send('encode-upload-progress', id, progress),
         onUploadComplete: (id, video) => event.sender.send('encode-upload-complete', id, video),
         onError: (id, error) => event.sender.send('encode-error', id, error),
-    }, settingsRepository.getSettings());
-    return await encoder.encode()
+    }, settingsRepository);
+    return encoder.encode();
 })
 ipcMain.handle('commitSettings', async (event: IpcMainInvokeEvent, ...args: any[]) => settingsRepository.commitSettings(args[0]))
 settingsRepository.watch((settings: Settings) => emit('settings', settings));

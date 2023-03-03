@@ -1,7 +1,10 @@
-
-import {EncoderListeners, EncoderOptions, Settings, User, Video} from "../../shared/schema";
+import {EncoderListeners, EncoderOptions, Video} from "../../shared/schema";
 import * as fs from "fs";
 import axios, {AxiosInstance} from "axios";
+import {SettingsRepository} from "./settings-repository";
+import * as path from "path";
+import {path as ffmpegPath} from "@ffmpeg-installer/ffmpeg";
+import {upload} from "./file-uploader";
 
 export class Encoder {
     private readonly id: string;
@@ -9,7 +12,7 @@ export class Encoder {
     private readonly output: string;
     private readonly options: EncoderOptions;
     private readonly listeners: EncoderListeners;
-    private readonly settings: Settings;
+    private readonly settingsRepository: SettingsRepository;
     private api: AxiosInstance;
     private s3: AxiosInstance;
 
@@ -18,15 +21,17 @@ export class Encoder {
         input: string,
         options: EncoderOptions,
         listeners: EncoderListeners,
-        settings: Settings
+        settingsRepository: SettingsRepository
     ) {
+
         this.id = id;
         this.input = input;
-        this.output = this.input.replace(/\.mp4$/, '.flv')
+        this.output = this.getOutputPath(input, 'flv');
         this.options = options;
         this.listeners = listeners;
-        this.settings = settings;
+        this.settingsRepository = settingsRepository;
 
+        const settings = settingsRepository.getSettings();
         this.api = axios.create({
             baseURL: settings.endpoint,
             headers: {
@@ -37,45 +42,36 @@ export class Encoder {
         this.s3 = axios.create({});
     }
 
-    async encode(): Promise<void> {
+    encode(): void {
         this.listeners.onStart(this.id)
 
-        const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
-        console.log('ffmpegPath', ffmpegPath)
-        const ffmpeg = require('fluent-ffmpeg')
-        ffmpeg.setFfmpegPath(ffmpegPath)
-        let totalTime = 0;
-        ffmpeg(this.input)
-            .outputOptions(this.getOutputOptions())
-            .output(this.output)
-            .on('start', () => {
-                console.log('start')
-            })
-            .on('codecData', data => {
-                totalTime = parseInt(data.duration.replace(/:/g, ''))
-            })
-            .on('progress', progress => {
-                const time = parseInt(progress.timemark.replace(/:/g, ''))
-                const percent = (time / totalTime) * 100
-                console.log('progress', percent)
-                this.listeners.onProgress(this.id, percent)
-            })
-            .on('end', async () => {
-                console.log('end')
-                // @ts-ignore
-                try {
-                    const video = await this.requestUploadUrl(this.settings.credentials.user)
-                    await this.upload(video)
-                } catch (error) {
+        if (this.requireEncoding()) {
+            const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+            console.log('ffmpegPath', ffmpegPath)
+            const ffmpeg = require('fluent-ffmpeg')
+            ffmpeg.setFfmpegPath(ffmpegPath)
+            let totalTime = 0;
+
+            ffmpeg(this.input)
+                .output(this.output)
+                .outputOptions(this.getOutputOptions())
+                .on('start', () => console.log('start'))
+                .on('codecData', data => totalTime = parseInt(data.duration.replace(/:/g, '')))
+                .on('progress', progress => {
+                    const time = parseInt(progress.timemark.replace(/:/g, ''))
+                    const percent = (time / totalTime) * 100
+                    console.log('progress', percent)
+                    this.listeners.onProgress(this.id, percent)
+                })
+                .on('end', async () => this.requestUpload(this.output))
+                .on('error', (error) => {
                     console.log('error', error)
                     this.listeners.onError(this.id, error.message)
-                }
-            })
-            .on('error', (error) => {
-                console.log('error', error)
-                this.listeners.onError(this.id, error.message)
-            })
-            .run()
+                })
+                .run()
+        } else {
+            this.requestUpload(this.input)
+        }
     }
 
     private getOutputOptions() {
@@ -94,13 +90,21 @@ export class Encoder {
         ]
     }
 
-    private async requestUploadUrl(user: User): Promise<Video> {
+    private async requestUpload(filename: string): Promise<void> {
+        const user = this.settingsRepository.getSettings().credentials.user;
         const response = await this.api.post(`channels/${user.id}/videos`, {
             title: this.options.title,
-            size: fs.statSync(this.output).size,
+            size: fs.statSync(filename).size,
         })
 
-        return response.data as Video
+        const video = response.data as Video
+
+        try {
+            await this.handleUpload(video, filename)
+        } catch (error) {
+            console.log('error', error)
+            this.listeners.onError(this.id, error.message)
+        }
     }
 
     private async confirmUpload(video: Video): Promise<Video> {
@@ -117,29 +121,17 @@ export class Encoder {
         await this.api.delete(`videos/${video.id}/cancel`)
     }
 
-    private async upload(video: Video) {
+    private async handleUpload(video: Video, filename: string) {
         if (!video.upload_url) {
             return
         }
 
-        const stream = fs.createReadStream(this.output)
-        stream.on('error', (error) => {
-            console.log('upload error', error)
-            this.listeners.onError(this.id, error.message)
-        })
-
-        const progress = (progress: any) => {
-            const progressCompleted = progress.loaded / fs.statSync(this.output).size * 100
-            this.listeners.onUploadProgress(this.id, progressCompleted)
-        }
-
         try {
-            await this.s3.put(video.upload_url, stream, {
-                onUploadProgress: progress,
-                headers: {
-                    'Content-Type': 'video/x-flv',
-                }
+            await upload(video.upload_url, filename, (progress: number) => {
+                this.listeners.onUploadProgress(this.id, progress)
             })
+
+            this.settingsRepository.reloadUser();
 
             this.listeners.onUploadComplete(this.id, await this.confirmUpload(video))
         } catch (error) {
@@ -151,5 +143,23 @@ export class Encoder {
             }
             this.listeners.onError(this.id, `Upload Error: ${error.message}`)
         }
+    }
+
+    /**
+     * This will return the output path for the encoded file.
+     * It will have the same name as the input file, but with the given extension.
+     * Also, a suffix will be added to the file name to avoid overwriting existing files.
+     */
+    private getOutputPath(input: string, ext: string) {
+        const parsed = path.parse(input)
+        return path.join(parsed.dir, `${parsed.name}-rerun.${ext}`)
+    }
+
+    /**
+     * You can also just upload the file as is, without encoding it.
+     * @private
+     */
+    private requireEncoding() {
+        return path.parse(this.input).ext !== '.flv'
     }
 }

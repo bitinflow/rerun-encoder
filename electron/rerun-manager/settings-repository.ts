@@ -2,6 +2,7 @@ import defu from 'defu'
 import {platform} from 'node:process'
 import * as fs from 'fs'
 import {Credentials, Settings} from "../../shared/schema";
+import {resolveUser} from "../main/helpers";
 
 const defaults: Settings = {
     version: '1.0.1',
@@ -59,6 +60,8 @@ export class SettingsRepository {
         // if so, set settings.credentials to null
         if (this.isExpired()) {
             console.log('Credentials expired!');
+        } else {
+            this.reloadUser();
         }
 
         await this.save()
@@ -120,5 +123,20 @@ export class SettingsRepository {
         }
 
         return true;
+    }
+
+    reloadUser() {
+        try {
+            console.debug('Reloading user')
+            resolveUser(
+                this.settings.credentials.access_token,
+                this.settings.credentials.token_type
+            ).then((user) => {
+                this.settings.credentials.user = user
+                this.save()
+            })
+        } catch (e) {
+            console.error('Failed to reload user', e)
+        }
     }
 }
