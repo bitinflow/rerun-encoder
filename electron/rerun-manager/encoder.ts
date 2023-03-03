@@ -3,8 +3,6 @@ import {EncoderListeners, EncoderOptions, Settings, User, Video} from "../../sha
 import * as fs from "fs";
 import axios, {AxiosInstance} from "axios";
 
-const ffmpeg = require('fluent-ffmpeg')
-
 export class Encoder {
     private readonly id: string;
     private readonly input: string;
@@ -42,18 +40,25 @@ export class Encoder {
     async encode(): Promise<void> {
         this.listeners.onStart(this.id)
 
-        const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+        const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+        console.log('ffmpegPath', ffmpegPath)
+        const ffmpeg = require('fluent-ffmpeg')
         ffmpeg.setFfmpegPath(ffmpegPath)
-
+        let totalTime = 0;
         ffmpeg(this.input)
             .outputOptions(this.getOutputOptions())
             .output(this.output)
             .on('start', () => {
                 console.log('start')
             })
-            .on('progress', (progress) => {
-                console.log('progress', progress)
-                this.listeners.onProgress(this.id, progress.percent)
+            .on('codecData', data => {
+                totalTime = parseInt(data.duration.replace(/:/g, ''))
+            })
+            .on('progress', progress => {
+                const time = parseInt(progress.timemark.replace(/:/g, ''))
+                const percent = (time / totalTime) * 100
+                console.log('progress', percent)
+                this.listeners.onProgress(this.id, percent)
             })
             .on('end', async () => {
                 console.log('end')
