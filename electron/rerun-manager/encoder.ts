@@ -42,6 +42,9 @@ export class Encoder {
     async encode(): Promise<void> {
         this.listeners.onStart(this.id)
 
+        const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+        ffmpeg.setFfmpegPath(ffmpegPath)
+
         ffmpeg(this.input)
             .outputOptions(this.getOutputOptions())
             .output(this.output)
