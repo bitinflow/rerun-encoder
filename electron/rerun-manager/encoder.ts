@@ -1,60 +1,72 @@
-import {EncoderListeners, EncoderOptions, Video} from "../../shared/schema";
-import * as fs from "fs";
-import axios, {AxiosInstance} from "axios";
-import {SettingsRepository} from "./settings-repository";
-import * as path from "path";
-import {path as ffmpegPath} from "@ffmpeg-installer/ffmpeg";
-import {upload} from "./file-uploader";
+import { EncoderListeners, EncoderOptions, Video } from '../../shared/schema'
+import * as fs from 'fs'
+import axios, { AxiosInstance } from 'axios'
+import { SettingsRepository } from './settings-repository'
+import * as path from 'path'
+import { path as ffmpegPath } from '@ffmpeg-installer/ffmpeg'
+import { upload } from './file-uploader'
+
+console.log('ffmpegPath', ffmpegPath)
+const ffmpeg = require('fluent-ffmpeg')
+ffmpeg.setFfmpegPath(ffmpegPath)
+
+let ffmpegCommand: any = null
+
+export interface Signal {
+    aborted: boolean
+}
 
 export class Encoder {
-    private readonly id: string;
-    private readonly input: string;
-    private readonly output: string;
-    private readonly options: EncoderOptions;
-    private readonly listeners: EncoderListeners;
-    private readonly settingsRepository: SettingsRepository;
-    private api: AxiosInstance;
-    private s3: AxiosInstance;
+    private readonly id: string
+    private readonly input: string
+    private readonly output: string
+    private readonly options: EncoderOptions
+    private readonly listeners: EncoderListeners
+    private readonly settingsRepository: SettingsRepository
+    private api: AxiosInstance
+    private s3: AxiosInstance
+    private signal: Signal = {aborted: false}
 
     constructor(
         id: string,
         input: string,
         options: EncoderOptions,
         listeners: EncoderListeners,
-        settingsRepository: SettingsRepository
+        settingsRepository: SettingsRepository,
     ) {
 
-        this.id = id;
-        this.input = input;
-        this.output = this.getOutputPath(input, 'flv');
-        this.options = options;
-        this.listeners = listeners;
-        this.settingsRepository = settingsRepository;
+        this.id = id
+        this.input = input
+        this.output = this.getOutputPath(input, 'flv')
+        this.options = options
+        this.listeners = listeners
+        this.settingsRepository = settingsRepository
 
-        const settings = settingsRepository.getSettings();
+        const settings = settingsRepository.getSettings()
         this.api = axios.create({
             baseURL: settings.endpoint,
             headers: {
-                Authorization: `${settings.credentials.token_type} ${settings.credentials.access_token}`
-            }
+                Authorization: `${settings.credentials.token_type} ${settings.credentials.access_token}`,
+            },
         })
 
-        this.s3 = axios.create({});
+        this.s3 = axios.create({})
     }
 
     encode(): void {
+        this.signal.aborted = false
         this.listeners.onStart(this.id)
 
         if (this.requireEncoding()) {
-            const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
-            console.log('ffmpegPath', ffmpegPath)
-            const ffmpeg = require('fluent-ffmpeg')
-            ffmpeg.setFfmpegPath(ffmpegPath)
-            let totalTime = 0;
+            let totalTime = 0
+            const outputOptions = this.getOutputOptions()
 
-            ffmpeg(this.input)
+            console.log('Using the following output options:', outputOptions)
+
+            ffmpegCommand = ffmpeg(this.input)
+            ffmpegCommand
                 .output(this.output)
-                .outputOptions(this.getOutputOptions())
+                .outputOptions(outputOptions)
                 .on('start', () => console.log('start'))
                 .on('codecData', data => totalTime = parseInt(data.duration.replace(/:/g, '')))
                 .on('progress', progress => {
@@ -75,23 +87,32 @@ export class Encoder {
     }
 
     private getOutputOptions() {
+        const output = this.settingsRepository.getSettings().output
+
         return [
-            '-c:v libx264',
-            '-preset veryfast',
-            '-crf 23',
-            '-maxrate 6000k',
-            '-bufsize 6000k',
-            '-c:a aac',
-            '-b:a 128k',
+            `-c:v ${output.video.encoder}`, // libx264 Use NVIDIA NVENC for hardware-accelerated encoding
+            `-profile:v ${output.profile}`, // Use the "main" profile for H264 (compatible with most browsers)
+            '-x264opts keyint=60:no-scenecut', // Set the key frame interval to 60 seconds (same as the original video)
+            `-preset ${output.preset}`, // Use the "fast" preset for faster transcoding
+            `-crf ${output.crf}`, // Adjust the Constant Rate Factor for the desired quality (lower values mean higher quality, 18-28 is usually a good range)
+            '-sws_flags bilinear', // Use bilinear scaling algorithm for better image quality
+            `-maxrate ${output.video.bitrate}k`,
+            `-bufsize ${output.video.bitrate}k`,
+            `-c:a ${output.audio.encoder}`,
+            `-b:a ${output.audio.bitrate}k`,
             '-ac 2',
             '-f flv',
             '-movflags +faststart',
-            '-y'
+            '-y',
         ]
     }
 
     private async requestUpload(filename: string): Promise<void> {
-        const user = this.settingsRepository.getSettings().credentials.user;
+        if (this.signal.aborted) {
+            console.log('upload aborted, skipping upload request')
+            return
+        }
+        const user = this.settingsRepository.getSettings().credentials.user
         const response = await this.api.post(`channels/${user.id}/videos`, {
             title: this.options.title,
             size: fs.statSync(filename).size,
@@ -114,10 +135,11 @@ export class Encoder {
 
         console.log('confirm', response.data)
 
-        return response.data as Video;
+        return response.data as Video
     }
 
     private async cancelUpload(video: Video): Promise<void> {
+        console.log('cancel upload', video.id)
         await this.api.delete(`videos/${video.id}/cancel`)
     }
 
@@ -126,12 +148,18 @@ export class Encoder {
             return
         }
 
+        if (this.signal.aborted) {
+            console.log('upload aborted, skipping upload handle')
+            this.listeners.onError(this.id, `Upload Error: Upload aborted`)
+            return
+        }
+
         try {
             await upload(video.upload_url, filename, (progress: number) => {
                 this.listeners.onUploadProgress(this.id, progress)
-            })
+            }, this.signal)
 
-            this.settingsRepository.reloadUser();
+            this.settingsRepository.reloadUser()
 
             this.listeners.onUploadComplete(this.id, await this.confirmUpload(video))
         } catch (error) {
@@ -161,5 +189,13 @@ export class Encoder {
      */
     private requireEncoding() {
         return path.parse(this.input).ext !== '.flv'
+    }
+
+    cancel() {
+        console.log('cancel rerun encode')
+        this.signal.aborted = true
+        if (ffmpegCommand) {
+            ffmpegCommand.kill()
+        }
     }
 }

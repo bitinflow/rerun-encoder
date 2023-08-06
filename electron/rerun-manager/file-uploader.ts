@@ -1,8 +1,10 @@
+import { Signal } from './encoder'
+
 const fs = require('fs');
 const https = require('https');
 const {promisify} = require('util');
 
-export async function upload(url, filename, onProgress): Promise<void> {
+export async function upload(url, filename, onProgress, signal: Signal): Promise<void> {
     const fileStream = fs.createReadStream(filename);
     const fileStats = await promisify(fs.stat)(filename);
 
@@ -29,6 +31,12 @@ export async function upload(url, filename, onProgress): Promise<void> {
 
         let uploadedBytes = 0;
         fileStream.on('data', (chunk) => {
+            if (signal.aborted) {
+                console.log('upload aborted, skipping upload stream')
+                req.destroy();
+                fileStream.destroy();
+                return;
+            }
             uploadedBytes += chunk.length;
             onProgress(Math.round((uploadedBytes / fileStats.size) * 100));
         });

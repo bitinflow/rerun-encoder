@@ -53,6 +53,7 @@ require('update-electron-app')({
 // process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 let win: BrowserWindow | null = null
+let encoder: Encoder | null = null
 // Here, you can also use other preload
 const preload = join(__dirname, '../preload/index.js')
 const url = process.env.VITE_DEV_SERVER_URL
@@ -79,11 +80,11 @@ async function createWindow(settings: Settings) {
     })
 
     if (process.env.VITE_DEV_SERVER_URL) { // electron-vite-vue#298
-        win.loadURL(url)
+        await win.loadURL(url)
         // Open devTool if the app is not packaged
         // win.webContents.openDevTools()
     } else {
-        win.loadFile(indexHtml)
+        await win.loadFile(indexHtml)
     }
 
     // Test actively push message to the Electron-Renderer
@@ -93,6 +94,7 @@ async function createWindow(settings: Settings) {
 
     // Make all links open with the browser, not with the application
     win.webContents.setWindowOpenHandler(({url}) => {
+        console.log('setWindowOpenHandler', url)
         if (url.startsWith('https:')) shell.openExternal(url)
         return {action: 'deny'}
     })
@@ -159,7 +161,7 @@ ipcMain.handle('quit', async () => app.quit())
 ipcMain.handle('minimize', async () => win.minimize())
 ipcMain.handle('encode', async (event: IpcMainInvokeEvent, ...args: any[]) => {
     const arg = args[0] as { id: string, input: string, options: EncoderOptions };
-    const encoder = new Encoder(arg.id, arg.input, arg.options, {
+    encoder = new Encoder(arg.id, arg.input, arg.options, {
         onStart: (id) => event.sender.send('encode-start', id),
         onProgress: (id, progress) => event.sender.send('encode-progress', id, progress),
         onUploadProgress: (id, progress) => event.sender.send('encode-upload-progress', id, progress),
@@ -168,6 +170,7 @@ ipcMain.handle('encode', async (event: IpcMainInvokeEvent, ...args: any[]) => {
     }, settingsRepository);
     return encoder.encode();
 })
+ipcMain.handle('cancel-encode', async () => encoder.cancel());
 ipcMain.handle('commitSettings', async (event: IpcMainInvokeEvent, ...args: any[]) => settingsRepository.commitSettings(args[0]))
 settingsRepository.watch((settings: Settings) => emit('settings', settings));
 

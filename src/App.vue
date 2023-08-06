@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import {computed, onMounted, ref} from "vue";
-import ProgressBar from "./components/ProgressBar.vue";
-import AppTitleBar from "./components/AppTitleBar.vue";
-import VButton from "./components/VButton.vue";
-import {Settings, Video} from "../shared/schema";
+import { computed, onMounted, ref } from 'vue'
+import ProgressBar from './components/ProgressBar.vue'
+import AppTitleBar from './components/AppTitleBar.vue'
+import VButton from './components/VButton.vue'
+import { Settings, Video } from '../shared/schema'
+import AppEncoderOptions from './components/AppEncoderOptions.vue'
 
-console.log("[App.vue]", `Hello world from Electron ${process.versions.electron}!`)
+console.log('[App.vue]', `Hello world from Electron ${process.versions.electron}!`)
 
 const isEncoding = ref(false)
 const isCompleted = ref(false)
+const isOptionsOpen = ref(false)
 const encodingProgress = ref(0)
 const encodingProgressStage = ref<string>('unknown')
 const encodingError = ref<string | null>(null)
@@ -83,7 +85,7 @@ const requestEncode = (event: any) => {
   }
 }
 
-const settings = ref<Settings | null>(null);
+const settings = ref<Settings | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 // Authorization Code Grant with PKCE
@@ -105,6 +107,15 @@ const settingsChanged = (settings: any) => {
 const logout = () => {
   // @ts-ignore
   window.api.logout()
+}
+
+const cancelEncode = () => {
+  // @ts-ignore
+  window.api.cancelEncode()
+}
+
+const openOptions = () => {
+  isOptionsOpen.value = true
 }
 
 const storageUpgradeRequired = computed(() => {
@@ -132,15 +143,25 @@ onMounted(() => {
     <div>
       <app-title-bar/>
 
-      <div class="px-6 flex">
+      <div class="px-6 flex" v-if="!isOptionsOpen">
         <div>
           <img src="./assets/ffmpeg.svg" class="h-16" alt="ffmpeg">
         </div>
         <div>
           <div class="font-bold text-xl mt-2">Rerun Encoder</div>
-          <div class="text-sm text-zinc-400">Powered by FFmpeg</div>
+          <div class="text-sm text-zinc-400">
+            Powered by FFmpeg ({{ settings?.output?.video?.encoder }})
+          </div>
 
           <div class="flex gap-4 mt-4">
+            <a
+                class="text-rose-400"
+                href="#"
+                @click.prevent="openOptions"
+            >
+              <i class="far fa-gear"></i>
+              Options
+            </a>
             <a
                 class="text-rose-400"
                 href="https://www.bitinflow.com/legal/privacy/"
@@ -160,9 +181,15 @@ onMounted(() => {
           </div>
         </div>
       </div>
+
+      <app-encoder-options
+          v-if="settings && isOptionsOpen"
+          :settings="settings"
+          @close="isOptionsOpen = false"
+      />
     </div>
     <div>
-      <div>
+      <div v-if="!isOptionsOpen">
         <div v-if="settings && settings.credentials" class="p-4 flex justify-between bg-base-900">
           <div class="test flex gap-2">
             <div>
@@ -212,6 +239,11 @@ onMounted(() => {
             </div>
             <template v-else-if="isEncoding">
               <progress-bar :progress="encodingProgress" :stage="encodingProgressStage"/>
+              <div>
+                <button class="text-rose-400/80 text-sm" @click="cancelEncode">
+                  Cancel
+                </button>
+              </div>
             </template>
             <template v-else>
               <input

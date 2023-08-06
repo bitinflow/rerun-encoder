@@ -161,6 +161,9 @@ window.api = {
     logout: () => {
         return ipcRenderer.invoke('logout')
     },
+    cancelEncode: () => {
+        return ipcRenderer.invoke('cancel-encode')
+},
     encode: (id: string, input: string, options: EncoderOptions) => {
         return ipcRenderer.invoke('encode', {id, input, options})
     },

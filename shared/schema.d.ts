@@ -31,8 +31,22 @@ export interface Credentials {
  */
 export interface Settings {
     version?: string // version of the settings schema (diff will force a reset)
-    credentials?: Credentials | null,
-    endpoint?: string | null,
+    credentials?: Credentials | null
+    endpoint?: string | null
+    deleteOnComplete?: boolean
+    output?: {
+        video: {
+            encoder: 'libx264' | 'nvenc_h264'
+            bitrate: number
+        }
+        audio: {
+            encoder: 'aac'
+            bitrate: number
+        }
+        preset: 'default' | 'fast' | 'medium' | 'slow'
+        profile: 'high' | 'main' | 'baseline'
+        crf: number
+    }
 }
 
 export interface VerifiedGame {

@@ -1,20 +1,34 @@
-import defu from 'defu'
-import {platform} from 'node:process'
+import { defu } from 'defu'
+import { platform } from 'node:process'
 import * as fs from 'fs'
-import {Credentials, Settings} from "../../shared/schema";
-import {resolveUser} from "../main/helpers";
+import { Credentials, Settings } from '../../shared/schema'
+import { resolveUser } from '../main/helpers'
 
 const defaults: Settings = {
     version: '1.0.1',
     credentials: null,
     endpoint: 'https://api.rerunmanager.com/v1/',
+    deleteOnComplete: true,
+    output: {
+        video: {
+            encoder: 'libx264',
+            bitrate: 4500,
+        },
+        audio: {
+            encoder: 'aac',
+            bitrate: 128,
+        },
+        preset: 'fast',
+        profile: 'high',
+        crf: 23,
+    },
 }
 
 export class SettingsRepository {
     private settings: Settings | null
     private readonly path: string
-    private readonly listeners: Array<(settings: Settings) => void>;
-    private readonly directory: string;
+    private readonly listeners: Array<(settings: Settings) => void>
+    private readonly directory: string
 
     constructor() {
         this.listeners = []
@@ -38,14 +52,14 @@ export class SettingsRepository {
             const data = await fs.promises.readFile(this.path, {encoding: 'utf-8'})
 
             if (data) {
-                const settings = JSON.parse(data) as Settings;
+                const settings = JSON.parse(data) as Settings
 
                 if (settings.version !== defaults.version) {
-                    console.log('Settings version mismatch, resetting to defaults');
+                    console.log('Settings version mismatch, resetting to defaults')
                     this.settings = defaults
                 } else {
-                    console.log('Settings version match, merge with defaults');
-                    this.settings = defu.defu(settings, defaults)
+                    console.log('Settings version match, merge with defaults')
+                    this.settings = defu(settings, defaults)
                 }
             } else {
                 console.log('Settings file empty, resetting to defaults')
@@ -59,9 +73,9 @@ export class SettingsRepository {
         // check if settings.credentials.expires_at is in the past
         // if so, set settings.credentials to null
         if (this.isExpired()) {
-            console.log('Credentials expired!');
+            console.log('Credentials expired!')
         } else {
-            this.reloadUser();
+            this.reloadUser()
         }
 
         await this.save()
@@ -72,7 +86,7 @@ export class SettingsRepository {
     async save() {
         // call all listeners with the current settings
         this.listeners.forEach(
-            (listener: (settings: Settings) => void) => listener(this.settings)
+            (listener: (settings: Settings) => void) => listener(this.settings),
         )
 
         const pretty = JSON.stringify(this.settings, null, 2)
@@ -89,7 +103,7 @@ export class SettingsRepository {
             return process.env.HOME + '/Library/Preferences' + path
         }
 
-        return process.env.HOME + "/.local/share" + path
+        return process.env.HOME + '/.local/share' + path
     }
 
     getSettings() {
@@ -106,6 +120,7 @@ export class SettingsRepository {
     }
 
     commitSettings(settings: Settings) {
+        console.log('Committing settings', settings)
         this.settings = defu(settings, this.settings)
         this.save()
     }
@@ -122,7 +137,7 @@ export class SettingsRepository {
             return expiresAt < now
         }
 
-        return true;
+        return true
     }
 
     reloadUser() {
@@ -130,7 +145,7 @@ export class SettingsRepository {
             console.debug('Reloading user')
             resolveUser(
                 this.settings.credentials.access_token,
-                this.settings.credentials.token_type
+                this.settings.credentials.token_type,
             ).then((user) => {
                 this.settings.credentials.user = user
                 this.save()
