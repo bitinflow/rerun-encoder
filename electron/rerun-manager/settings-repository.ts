@@ -8,7 +8,7 @@ const defaults: Settings = {
     version: '1.0.1',
     credentials: null,
     endpoint: 'https://api.rerunmanager.com/v1/',
-    deleteOnComplete: true,
+    keep_encoded_file: true,
     output: {
         video: {
             encoder: 'libx264',

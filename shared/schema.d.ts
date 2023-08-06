@@ -33,7 +33,7 @@ export interface Settings {
     version?: string // version of the settings schema (diff will force a reset)
     credentials?: Credentials | null
     endpoint?: string | null
-    deleteOnComplete?: boolean
+    keep_encoded_file?: boolean
     output?: {
         video: {
             encoder: 'libx264' | 'nvenc_h264'
