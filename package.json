@@ -40,7 +40,7 @@
     "@tailwindcss/typography": "^0.5.9",
     "@types/cors": "^2.8.13",
     "@types/fluent-ffmpeg": "^2.1.21",
-    "@types/koa-cors": "^0.0.2",
+    "@types/koa-cors": "^0.0.3",
     "@types/koa-json": "^2.0.20",
     "@types/koa-logger": "^3.1.2",
     "@types/koa-router": "^7.4.4",
